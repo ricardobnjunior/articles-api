@@ -3,21 +3,35 @@
 from fastapi import FastAPI
 
 from app.api.router import api_router
-from app.config import settings
 from app.database import create_tables
 
-app = FastAPI(title="Content API")
 
-create_tables()
-
-app.include_router(api_router)
-
-
-@app.get("/health", tags=["health"])
-def health_check() -> dict:
-    """Return service health status.
+def create_app() -> FastAPI:
+    """Construct and configure the FastAPI application.
 
     Returns:
-        dict: A mapping with 'status' and 'environment' keys.
+        A configured FastAPI instance.
     """
-    return {"status": "ok", "environment": settings.environment}
+    application = FastAPI(
+        title="Articles API",
+        description="REST API for managing articles.",
+        version="1.0.0",
+    )
+
+    application.include_router(api_router)
+
+    @application.get("/health", tags=["health"])
+    def health_check() -> dict:
+        """Return a simple health status.
+
+        Returns:
+            A dict with status key.
+        """
+        return {"status": "ok"}
+
+    create_tables()
+
+    return application
+
+
+app = create_app()
