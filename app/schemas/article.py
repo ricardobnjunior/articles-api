@@ -1,61 +1,98 @@
-"""Pydantic schemas for Article endpoints."""
+"""Pydantic schemas for article request and response models."""
 
-import math
 from datetime import datetime
 from typing import Optional
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel
 
 from app.models.article import ArticleStatus
 
 
-class CategoryResponse(BaseModel):
-    """Schema for category in article response."""
+class CategoryBrief(BaseModel):
+    """Brief category representation used inside article responses.
 
-    model_config = ConfigDict(from_attributes=True)
+    Attributes:
+        id: Category primary key.
+        name: Category name.
+    """
 
     id: int
     name: str
-    slug: str
+
+    model_config = {"from_attributes": True}
 
 
 class ArticleCreate(BaseModel):
-    """Schema for creating an article."""
+    """Schema for creating a new article.
+
+    Attributes:
+        title: Article title.
+        content: Article body content.
+        status: Publication status (defaults to DRAFT).
+        category_ids: Optional list of category IDs to associate.
+    """
 
     title: str
-    body: str
-    author: str
-    status: ArticleStatus = ArticleStatus.draft
+    content: str
+    status: ArticleStatus = ArticleStatus.DRAFT
     category_ids: list[int] = []
 
 
 class ArticleUpdate(BaseModel):
-    """Schema for updating an article."""
+    """Schema for updating an existing article.
+
+    All fields are optional; only provided fields will be updated.
+
+    Attributes:
+        title: New article title.
+        content: New article body content.
+        status: New publication status.
+        category_ids: New list of category IDs.
+        image_url: New image URL (or None to clear).
+    """
 
     title: Optional[str] = None
-    body: Optional[str] = None
-    author: Optional[str] = None
+    content: Optional[str] = None
     status: Optional[ArticleStatus] = None
     category_ids: Optional[list[int]] = None
+    image_url: Optional[str] = None
 
 
 class ArticleResponse(BaseModel):
-    """Schema for article response."""
+    """Schema for article data returned by the API.
 
-    model_config = ConfigDict(from_attributes=True)
+    Attributes:
+        id: Article primary key.
+        title: Article title.
+        content: Article body content.
+        status: Publication status.
+        image_url: Optional URL path to the article image.
+        created_at: Creation timestamp.
+        updated_at: Last update timestamp.
+        categories: List of associated categories.
+    """
 
     id: int
     title: str
-    body: str
-    author: str
+    content: str
     status: ArticleStatus
+    image_url: str | None = None
     created_at: datetime
     updated_at: datetime
-    categories: list[CategoryResponse] = []
+    categories: list[CategoryBrief] = []
+
+    model_config = {"from_attributes": True}
 
 
 class PaginationMeta(BaseModel):
-    """Pagination metadata for list responses."""
+    """Pagination metadata for list responses.
+
+    Attributes:
+        total: Total number of items.
+        page: Current page number.
+        per_page: Items per page.
+        pages: Total number of pages.
+    """
 
     total: int
     page: int
@@ -64,7 +101,12 @@ class PaginationMeta(BaseModel):
 
 
 class ArticleList(BaseModel):
-    """Schema for paginated list of articles."""
+    """Schema for paginated article list response.
+
+    Attributes:
+        items: List of articles on the current page.
+        meta: Pagination metadata.
+    """
 
     items: list[ArticleResponse]
     meta: PaginationMeta

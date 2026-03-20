@@ -1,4 +1,4 @@
-"""Database models package."""
+"""ORM models package."""
 
 from app.models.article import Article, ArticleStatus, article_categories
 from app.models.category import Category

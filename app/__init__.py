@@ -1,1 +1,1 @@
-"""Application package."""
+"""Articles API application package."""

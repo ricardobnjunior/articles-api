@@ -1,4 +1,4 @@
-"""FastAPI dependency providers."""
+"""Shared FastAPI dependencies."""
 
 from app.database import get_db
 

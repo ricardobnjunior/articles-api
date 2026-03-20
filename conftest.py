@@ -1,79 +1,81 @@
-"""Test configuration and fixtures for the article API."""
+"""Pytest configuration and shared fixtures."""
 
 import os
 
-os.environ.setdefault("DATABASE_URL", "sqlite:///./test.db")
+import pytest
+from fastapi.testclient import TestClient
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+
+# Set required environment variables BEFORE importing app modules
+os.environ.setdefault("DATABASE_URL", "sqlite:///./test_articles.db")
 os.environ.setdefault("SECRET_KEY", "test-secret-key-not-for-production")
+os.environ.setdefault("ENVIRONMENT", "test")
 
-from typing import Generator  # noqa: E402
-
-import pytest  # noqa: E402
-from fastapi.testclient import TestClient  # noqa: E402
-from sqlalchemy import create_engine  # noqa: E402
-from sqlalchemy.orm import Session, sessionmaker  # noqa: E402
-
+from app.config import get_settings  # noqa: E402
 from app.database import Base, get_db  # noqa: E402
 from app.main import app  # noqa: E402
 
-SQLALCHEMY_TEST_DATABASE_URL = "sqlite:///./test_articles.db"
+TEST_DATABASE_URL = "sqlite:///./test_articles.db"
 
 test_engine = create_engine(
-    SQLALCHEMY_TEST_DATABASE_URL,
+    TEST_DATABASE_URL,
     connect_args={"check_same_thread": False},
 )
-TestSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=test_engine)
+TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=test_engine)
 
 
-@pytest.fixture(scope="function", autouse=True)
-def setup_database():
-    """Create tables before each test and drop them after.
+@pytest.fixture(autouse=True)
+def override_upload_dir(tmp_path):
+    """Override upload directory with a temporary path for test isolation.
 
-    Yields:
-        None
+    Args:
+        tmp_path: Pytest built-in fixture providing a temporary directory.
     """
-    Base.metadata.create_all(bind=test_engine)
+    settings = get_settings()
+    original_upload_dir = settings.upload_dir
+    settings.upload_dir = str(tmp_path / "uploads")
+    os.makedirs(settings.upload_dir, exist_ok=True)
     yield
-    Base.metadata.drop_all(bind=test_engine)
+    settings.upload_dir = original_upload_dir
 
 
 @pytest.fixture(scope="function")
-def db_session(setup_database) -> Generator[Session, None, None]:
-    """Provide a database session for tests.
+def db_session():
+    """Provide a clean database session for each test.
 
-    Args:
-        setup_database: Fixture that ensures tables exist.
+    Creates all tables before the test and drops them after.
 
     Yields:
-        SQLAlchemy Session instance.
+        SQLAlchemy Session bound to the test database.
     """
-    session = TestSessionLocal()
+    Base.metadata.create_all(bind=test_engine)
+    session = TestingSessionLocal()
     try:
         yield session
     finally:
         session.close()
+        Base.metadata.drop_all(bind=test_engine)
 
 
 @pytest.fixture(scope="function")
-def client(setup_database) -> Generator[TestClient, None, None]:
-    """Provide a FastAPI TestClient with a test database session.
+def client(db_session):
+    """Provide a TestClient with a test database session override.
 
     Args:
-        setup_database: Fixture that ensures tables exist.
+        db_session: Test database session fixture.
 
     Yields:
         FastAPI TestClient instance.
     """
 
-    def override_get_db() -> Generator[Session, None, None]:
-        session = TestSessionLocal()
+    def override_get_db():
         try:
-            yield session
+            yield db_session
         finally:
-            session.close()
+            pass
 
     app.dependency_overrides[get_db] = override_get_db
-
     with TestClient(app) as test_client:
         yield test_client
-
     app.dependency_overrides.clear()
