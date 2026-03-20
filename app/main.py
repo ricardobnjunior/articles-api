@@ -5,33 +5,15 @@ from fastapi import FastAPI
 from app.api.router import api_router
 from app.database import create_tables
 
+app = FastAPI(title="Blog API")
 
-def create_app() -> FastAPI:
-    """Construct and configure the FastAPI application.
+# Create tables on startup
+create_tables()
 
-    Returns:
-        A configured FastAPI instance.
-    """
-    application = FastAPI(
-        title="Articles API",
-        description="REST API for managing articles.",
-        version="1.0.0",
-    )
-
-    application.include_router(api_router)
-
-    @application.get("/health", tags=["health"])
-    def health_check() -> dict:
-        """Return a simple health status.
-
-        Returns:
-            A dict with status key.
-        """
-        return {"status": "ok"}
-
-    create_tables()
-
-    return application
+app.include_router(api_router)
 
 
-app = create_app()
+@app.get("/health")
+def health_check():
+    """Health check endpoint."""
+    return {"status": "ok"}

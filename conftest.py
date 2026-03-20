@@ -1,64 +1,73 @@
-"""Root conftest — sets up environment variables and shared test fixtures."""
+"""Pytest configuration and shared fixtures."""
 
 import os
 
-os.environ["DATABASE_URL"] = "sqlite:///:memory:"
-os.environ["SECRET_KEY"] = "test-secret-key-not-for-production"
-os.environ["ENVIRONMENT"] = "testing"
-
-from collections.abc import Generator  # noqa: E402
+# Set required environment variables BEFORE importing any app modules
+os.environ.setdefault("DATABASE_URL", "sqlite:///./test.db")
+os.environ.setdefault("SECRET_KEY", "test-secret-key-not-for-production")
 
 import pytest  # noqa: E402
+from fastapi.testclient import TestClient  # noqa: E402
 from sqlalchemy import create_engine  # noqa: E402
 from sqlalchemy.orm import Session, sessionmaker  # noqa: E402
-from starlette.testclient import TestClient  # noqa: E402
-
-# Use a file-based SQLite DB for tests to avoid in-memory isolation issues
-TEST_DATABASE_URL = "sqlite:///./test_temp.db"
-
-test_engine = create_engine(
-    TEST_DATABASE_URL, connect_args={"check_same_thread": False}
-)
-TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=test_engine)
-
-# Patch app.database BEFORE importing app modules that use it
-import app.database as _app_database  # noqa: E402
-
-_app_database.engine = test_engine
-_app_database.SessionLocal = TestingSessionLocal
-
-# Now import models to register them with Base
-import app.models  # noqa: F401, E402
 
 from app.database import Base, get_db  # noqa: E402
-
-# Now import the app (create_tables will use the patched engine)
 from app.main import app  # noqa: E402
 
+# Use an in-memory SQLite database for tests
+TEST_DATABASE_URL = "sqlite:///./test_app.db"
 
-@pytest.fixture(scope="function")
-def db_session() -> Generator[Session, None, None]:
-    """Create a fresh DB session for each test."""
-    # Drop and recreate all tables for a clean slate
-    Base.metadata.drop_all(bind=test_engine)
-    Base.metadata.create_all(bind=test_engine)
+engine = create_engine(
+    TEST_DATABASE_URL,
+    connect_args={"check_same_thread": False},
+)
+TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+
+
+@pytest.fixture(autouse=True)
+def setup_database() -> None:
+    """Create all tables before each test and drop them after."""
+    # Import models to ensure they are registered with Base.metadata
+    import app.models  # noqa: F401
+
+    Base.metadata.create_all(bind=engine)
+    yield
+    Base.metadata.drop_all(bind=engine)
+
+
+@pytest.fixture
+def db_session(setup_database: None) -> Session:
+    """Provide a transactional database session for tests.
+
+    Args:
+        setup_database: Fixture that ensures tables exist.
+
+    Yields:
+        A SQLAlchemy Session instance.
+    """
     session = TestingSessionLocal()
     try:
         yield session
     finally:
         session.close()
-        Base.metadata.drop_all(bind=test_engine)
 
 
-@pytest.fixture(scope="function")
-def client(db_session: Session) -> Generator[TestClient, None, None]:
-    """Return a TestClient with the DB dependency overridden."""
+@pytest.fixture
+def client(setup_database: None) -> TestClient:
+    """Provide a FastAPI TestClient with overridden database dependency.
 
-    def override_get_db() -> Generator[Session, None, None]:
+    Args:
+        setup_database: Fixture that ensures tables exist.
+
+    Yields:
+        A configured TestClient instance.
+    """
+    def override_get_db():
+        db = TestingSessionLocal()
         try:
-            yield db_session
+            yield db
         finally:
-            pass
+            db.close()
 
     app.dependency_overrides[get_db] = override_get_db
     with TestClient(app) as test_client:

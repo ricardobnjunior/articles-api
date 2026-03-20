@@ -1,59 +1,35 @@
-"""Pydantic v2 schemas for the Article resource."""
+"""Pydantic schemas for Article endpoints."""
 
 from datetime import datetime
 from typing import Optional
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict
 
-from app.models.article import ArticleStatus
+from app.schemas.category import CategoryResponse
 
 
 class ArticleCreate(BaseModel):
-    """Schema for creating a new article.
+    """Schema for creating a new article."""
 
-    Attributes:
-        title: Article title, max 200 characters.
-        body: Article body text.
-        author: Author name, max 100 characters.
-        status: Publication status, defaults to draft.
-    """
-
-    title: str = Field(..., max_length=200)
+    title: str
     body: str
-    author: str = Field(..., max_length=100)
-    status: ArticleStatus = ArticleStatus.draft
+    author: str
+    status: Optional[str] = "draft"
+    category_ids: list[int] = []
 
 
 class ArticleUpdate(BaseModel):
-    """Schema for partially updating an existing article.
+    """Schema for updating an existing article."""
 
-    All fields are optional; only provided fields are updated.
-
-    Attributes:
-        title: New title, max 200 characters.
-        body: New body text.
-        author: New author name, max 100 characters.
-        status: New publication status.
-    """
-
-    title: Optional[str] = Field(default=None, max_length=200)
+    title: Optional[str] = None
     body: Optional[str] = None
-    author: Optional[str] = Field(default=None, max_length=100)
-    status: Optional[ArticleStatus] = None
+    author: Optional[str] = None
+    status: Optional[str] = None
+    category_ids: list[int] = []
 
 
 class ArticleResponse(BaseModel):
-    """Schema for serializing an article from the database.
-
-    Attributes:
-        id: Article primary key.
-        title: Article title.
-        body: Article body text.
-        author: Author name.
-        status: Publication status.
-        created_at: Creation timestamp.
-        updated_at: Last update timestamp.
-    """
+    """Schema for article responses."""
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -61,18 +37,16 @@ class ArticleResponse(BaseModel):
     title: str
     body: str
     author: str
-    status: ArticleStatus
-    created_at: Optional[datetime] = None
-    updated_at: Optional[datetime] = None
+    status: str
+    created_at: datetime
+    updated_at: datetime
+    categories: list[CategoryResponse] = []
 
 
 class ArticleList(BaseModel):
-    """Schema for a paginated list of articles.
+    """Schema for paginated article list responses."""
 
-    Attributes:
-        items: List of article responses.
-        total: Total number of articles in the database.
-    """
+    model_config = ConfigDict(from_attributes=True)
 
-    items: list[ArticleResponse]
     total: int
+    articles: list[ArticleResponse]

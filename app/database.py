@@ -1,33 +1,24 @@
-"""Database engine, session factory, and base model for SQLAlchemy (sync)."""
+"""Database configuration and session management."""
 
-from collections.abc import Generator
+import os
 
 from sqlalchemy import create_engine
-from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
+from sqlalchemy.orm import declarative_base, sessionmaker
 
-from app.config import get_settings
+DATABASE_URL = os.environ.get("DATABASE_URL", "sqlite:///./app.db")
 
-
-def _make_engine():
-    """Create the SQLAlchemy engine from settings."""
-    settings = get_settings()
-    kwargs = {}
-    if "sqlite" in settings.database_url:
-        kwargs["connect_args"] = {"check_same_thread": False}
-    return create_engine(settings.database_url, **kwargs)
-
-
-engine = _make_engine()
+engine = create_engine(
+    DATABASE_URL,
+    connect_args={"check_same_thread": False} if DATABASE_URL.startswith("sqlite") else {},
+)
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
-
-class Base(DeclarativeBase):
-    """Declarative base class for all ORM models."""
+Base = declarative_base()
 
 
-def get_db() -> Generator[Session, None, None]:
-    """Yield a database session for use as a FastAPI dependency."""
+def get_db():
+    """Dependency that provides a database session."""
     db = SessionLocal()
     try:
         yield db
@@ -35,8 +26,6 @@ def get_db() -> Generator[Session, None, None]:
         db.close()
 
 
-def create_tables() -> None:
-    """Create all tables defined by ORM models."""
-    import app.models  # noqa: F401 — ensure models are registered
-
+def create_tables():
+    """Create all database tables."""
     Base.metadata.create_all(bind=engine)
