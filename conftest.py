@@ -1,10 +1,11 @@
-"""Pytest configuration and shared fixtures."""
+"""Test configuration and fixtures for the article API."""
 
 import os
 
-# Set required environment variables BEFORE importing any app modules
 os.environ.setdefault("DATABASE_URL", "sqlite:///./test.db")
 os.environ.setdefault("SECRET_KEY", "test-secret-key-not-for-production")
+
+from typing import Generator  # noqa: E402
 
 import pytest  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
@@ -14,62 +15,65 @@ from sqlalchemy.orm import Session, sessionmaker  # noqa: E402
 from app.database import Base, get_db  # noqa: E402
 from app.main import app  # noqa: E402
 
-# Use an in-memory SQLite database for tests
-TEST_DATABASE_URL = "sqlite:///./test_app.db"
+SQLALCHEMY_TEST_DATABASE_URL = "sqlite:///./test_articles.db"
 
-engine = create_engine(
-    TEST_DATABASE_URL,
+test_engine = create_engine(
+    SQLALCHEMY_TEST_DATABASE_URL,
     connect_args={"check_same_thread": False},
 )
-TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+TestSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=test_engine)
 
 
-@pytest.fixture(autouse=True)
-def setup_database() -> None:
-    """Create all tables before each test and drop them after."""
-    # Import models to ensure they are registered with Base.metadata
-    import app.models  # noqa: F401
+@pytest.fixture(scope="function", autouse=True)
+def setup_database():
+    """Create tables before each test and drop them after.
 
-    Base.metadata.create_all(bind=engine)
+    Yields:
+        None
+    """
+    Base.metadata.create_all(bind=test_engine)
     yield
-    Base.metadata.drop_all(bind=engine)
+    Base.metadata.drop_all(bind=test_engine)
 
 
-@pytest.fixture
-def db_session(setup_database: None) -> Session:
-    """Provide a transactional database session for tests.
+@pytest.fixture(scope="function")
+def db_session(setup_database) -> Generator[Session, None, None]:
+    """Provide a database session for tests.
 
     Args:
         setup_database: Fixture that ensures tables exist.
 
     Yields:
-        A SQLAlchemy Session instance.
+        SQLAlchemy Session instance.
     """
-    session = TestingSessionLocal()
+    session = TestSessionLocal()
     try:
         yield session
     finally:
         session.close()
 
 
-@pytest.fixture
-def client(setup_database: None) -> TestClient:
-    """Provide a FastAPI TestClient with overridden database dependency.
+@pytest.fixture(scope="function")
+def client(setup_database) -> Generator[TestClient, None, None]:
+    """Provide a FastAPI TestClient with a test database session.
 
     Args:
         setup_database: Fixture that ensures tables exist.
 
     Yields:
-        A configured TestClient instance.
+        FastAPI TestClient instance.
     """
-    def override_get_db():
-        db = TestingSessionLocal()
+
+    def override_get_db() -> Generator[Session, None, None]:
+        session = TestSessionLocal()
         try:
-            yield db
+            yield session
         finally:
-            db.close()
+            session.close()
 
     app.dependency_overrides[get_db] = override_get_db
+
     with TestClient(app) as test_client:
         yield test_client
+
     app.dependency_overrides.clear()
