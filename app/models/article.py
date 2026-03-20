@@ -1,13 +1,15 @@
-"""Article ORM model."""
+"""SQLAlchemy ORM model for articles."""
 
 import enum
-from datetime import datetime
 
 from sqlalchemy import Column, DateTime, Enum, ForeignKey, Integer, String, Table, Text
 from sqlalchemy.orm import relationship
+from sqlalchemy.sql import func
 
 from app.database import Base
 
+
+# Association table for many-to-many relationship between articles and categories
 article_categories = Table(
     "article_categories",
     Base.metadata,
@@ -19,43 +21,42 @@ article_categories = Table(
 class ArticleStatus(str, enum.Enum):
     """Enumeration of possible article statuses."""
 
-    draft = "draft"
-    published = "published"
-    archived = "archived"
+    DRAFT = "draft"
+    PUBLISHED = "published"
+    ARCHIVED = "archived"
 
 
 class Article(Base):
-    """ORM model for articles.
+    """ORM model representing an article.
 
     Attributes:
         id: Primary key.
         title: Article title.
-        body: Article body content.
-        author: Author name.
+        content: Article body content.
         status: Publication status.
-        created_at: Creation timestamp.
-        updated_at: Last update timestamp.
-        categories: Many-to-many relationship with Category.
+        image_url: Optional URL path to the article's image.
+        created_at: Timestamp when the article was created.
+        updated_at: Timestamp when the article was last updated.
+        categories: Many-to-many relationship to Category.
     """
 
     __tablename__ = "articles"
 
     id = Column(Integer, primary_key=True, index=True)
     title = Column(String(255), nullable=False, index=True)
-    body = Column(Text, nullable=False)
-    author = Column(String(100), nullable=False, index=True)
+    content = Column(Text, nullable=False)
     status = Column(
         Enum(ArticleStatus),
+        default=ArticleStatus.DRAFT,
         nullable=False,
-        default=ArticleStatus.draft,
-        index=True,
     )
-    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+    image_url = Column(String(500), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at = Column(
-        DateTime,
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
         nullable=False,
-        default=datetime.utcnow,
-        onupdate=datetime.utcnow,
     )
 
     categories = relationship(
