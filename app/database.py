@@ -1,31 +1,34 @@
-"""Database configuration and session management."""
+"""Database engine and session configuration."""
 
 import os
 
 from sqlalchemy import create_engine
-from sqlalchemy.orm import declarative_base, sessionmaker
+from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
-DATABASE_URL = os.environ.get("DATABASE_URL", "sqlite:///./app.db")
+DATABASE_URL = os.environ.get("DATABASE_URL", "sqlite:///./articles.db")
 
 engine = create_engine(
     DATABASE_URL,
-    connect_args={"check_same_thread": False} if DATABASE_URL.startswith("sqlite") else {},
+    connect_args={"check_same_thread": False} if "sqlite" in DATABASE_URL else {},
 )
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
-Base = declarative_base()
+
+class Base(DeclarativeBase):
+    """Base class for all ORM models."""
+
+    pass
 
 
 def get_db():
-    """Dependency that provides a database session."""
-    db = SessionLocal()
+    """Provide a database session as a FastAPI dependency.
+
+    Yields:
+        SQLAlchemy Session instance.
+    """
+    db: Session = SessionLocal()
     try:
         yield db
     finally:
         db.close()
-
-
-def create_tables():
-    """Create all database tables."""
-    Base.metadata.create_all(bind=engine)

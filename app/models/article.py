@@ -1,23 +1,23 @@
-"""Article model for the blog application."""
+"""Article ORM model."""
 
 import enum
+from datetime import datetime
 
-from sqlalchemy import Column, DateTime, Enum, ForeignKey, Integer, String, Table, Text, func
+from sqlalchemy import Column, DateTime, Enum, ForeignKey, Integer, String, Table, Text
 from sqlalchemy.orm import relationship
 
 from app.database import Base
 
-# Association table for Article <-> Category many-to-many relationship
 article_categories = Table(
     "article_categories",
     Base.metadata,
-    Column("article_id", Integer, ForeignKey("articles.id", ondelete="CASCADE")),
-    Column("category_id", Integer, ForeignKey("categories.id", ondelete="CASCADE")),
+    Column("article_id", Integer, ForeignKey("articles.id"), primary_key=True),
+    Column("category_id", Integer, ForeignKey("categories.id"), primary_key=True),
 )
 
 
 class ArticleStatus(str, enum.Enum):
-    """Status enumeration for articles."""
+    """Enumeration of possible article statuses."""
 
     draft = "draft"
     published = "published"
@@ -25,17 +25,41 @@ class ArticleStatus(str, enum.Enum):
 
 
 class Article(Base):
-    """SQLAlchemy model representing a blog article."""
+    """ORM model for articles.
+
+    Attributes:
+        id: Primary key.
+        title: Article title.
+        body: Article body content.
+        author: Author name.
+        status: Publication status.
+        created_at: Creation timestamp.
+        updated_at: Last update timestamp.
+        categories: Many-to-many relationship with Category.
+    """
 
     __tablename__ = "articles"
 
     id = Column(Integer, primary_key=True, index=True)
-    title = Column(String(200), nullable=False)
+    title = Column(String(255), nullable=False, index=True)
     body = Column(Text, nullable=False)
-    author = Column(String(100), nullable=False)
-    status = Column(Enum(ArticleStatus), default=ArticleStatus.draft, nullable=False)
-    created_at = Column(DateTime, server_default=func.now(), nullable=False)
-    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now(), nullable=False)
+    author = Column(String(100), nullable=False, index=True)
+    status = Column(
+        Enum(ArticleStatus),
+        nullable=False,
+        default=ArticleStatus.draft,
+        index=True,
+    )
+    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+    updated_at = Column(
+        DateTime,
+        nullable=False,
+        default=datetime.utcnow,
+        onupdate=datetime.utcnow,
+    )
 
-    # Many-to-many relationship with Category
-    categories = relationship("Category", secondary=article_categories, back_populates="articles")
+    categories = relationship(
+        "Category",
+        secondary=article_categories,
+        back_populates="articles",
+    )

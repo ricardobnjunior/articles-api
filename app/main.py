@@ -3,17 +3,23 @@
 from fastapi import FastAPI
 
 from app.api.router import api_router
-from app.database import create_tables
-
-app = FastAPI(title="Blog API")
-
-# Create tables on startup
-create_tables()
-
-app.include_router(api_router)
 
 
-@app.get("/health")
-def health_check():
-    """Health check endpoint."""
-    return {"status": "ok"}
+def create_app() -> FastAPI:
+    """Create and configure the FastAPI application.
+
+    Returns:
+        Configured FastAPI application instance.
+    """
+    application = FastAPI(
+        title="Articles API",
+        description="REST API for managing articles with search and filtering",
+        version="1.0.0",
+    )
+
+    application.include_router(api_router)
+
+    return application
+
+
+app = create_app()
