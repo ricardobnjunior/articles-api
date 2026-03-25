@@ -9,26 +9,29 @@ class Settings(BaseSettings):
     """Application settings loaded from environment variables.
 
     Attributes:
-        database_url: SQLAlchemy database connection URL.
-        secret_key: Secret key for JWT token signing.
-        environment: Deployment environment name.
-        upload_dir: Directory path for storing uploaded files.
+        database_url: SQLAlchemy database connection string.
+        secret_key: Secret key used for signing tokens.
+        upload_dir: Directory path where uploaded files are stored.
+        openrouter_api_key: API key for OpenRouter LLM service.
+        openrouter_model: Model identifier to use with OpenRouter.
     """
 
-    database_url: str = "sqlite:///./articles.db"
-    secret_key: str = "dev-secret-key-change-in-production"
-    environment: str = "development"
+    database_url: str
+    secret_key: str
     upload_dir: str = "uploads"
+
+    openrouter_api_key: str = ""
+    openrouter_model: str = "google/gemini-2.5-flash"
 
     model_config = {"env_file": ".env", "case_sensitive": False}
 
 
-@lru_cache()
+@lru_cache
 def get_settings() -> Settings:
     """Return cached application settings instance.
 
     Returns:
-        Singleton Settings instance.
+        The singleton Settings instance.
     """
     return Settings()
 
