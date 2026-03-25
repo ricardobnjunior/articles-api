@@ -1,52 +1,73 @@
-"""Root-level pytest configuration and shared fixtures."""
+"""Pytest configuration and shared fixtures."""
 
 import os
 
-# Set test environment variables BEFORE importing any app modules.
-os.environ.setdefault("DATABASE_URL", "sqlite:///test.db")
-os.environ.setdefault("SECRET_KEY", "test-secret-key-not-for-production")
-os.environ.setdefault("ENVIRONMENT", "testing")
+import pytest
+from fastapi.testclient import TestClient
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
 
-import pytest  # noqa: E402
-from sqlalchemy.orm import Session  # noqa: E402
-from starlette.testclient import TestClient  # noqa: E402
+from app.config import get_settings
+from app.database import Base, get_db
+from app.main import app
 
-from app.database import Base, SessionLocal, create_tables, engine  # noqa: E402
-from app.main import app  # noqa: E402
+TEST_DATABASE_URL = "sqlite:///./test_articles.db"
+
+engine = create_engine(
+    TEST_DATABASE_URL,
+    connect_args={"check_same_thread": False},
+)
+TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 
 @pytest.fixture(scope="session", autouse=True)
-def setup_database() -> None:
-    """Create all database tables once for the test session.
-
-    Yields:
-        None
-    """
-    create_tables()
+def setup_test_db():
+    """Create test database tables once per test session."""
+    # Import models to register them
+    import app.models.article  # noqa: F401
+    import app.models.category  # noqa: F401
+    Base.metadata.create_all(bind=engine)
     yield
     Base.metadata.drop_all(bind=engine)
+    if os.path.exists("./test_articles.db"):
+        os.remove("./test_articles.db")
 
 
-@pytest.fixture
-def db_session() -> Session:
-    """Yield a SQLAlchemy Session for use in tests.
+@pytest.fixture()
+def db_session():
+    """Provide a transactional database session for each test."""
+    connection = engine.connect()
+    transaction = connection.begin()
+    session = TestingSessionLocal(bind=connection)
 
-    Yields:
-        Session: An active sync SQLAlchemy session that is closed after the test.
-    """
-    db: Session = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
+    yield session
+
+    session.close()
+    transaction.rollback()
+    connection.close()
 
 
-@pytest.fixture
-def client() -> TestClient:
-    """Yield a Starlette TestClient wrapping the FastAPI application.
+@pytest.fixture()
+def client(db_session):
+    """Provide a TestClient with the test database session injected."""
+    def override_get_db():
+        try:
+            yield db_session
+        finally:
+            pass
 
-    Yields:
-        TestClient: A synchronous HTTP test client.
-    """
+    app.dependency_overrides[get_db] = override_get_db
     with TestClient(app) as test_client:
         yield test_client
+    app.dependency_overrides.clear()
+
+
+@pytest.fixture(autouse=True)
+def override_upload_dir(tmp_path):
+    """Override the upload directory to use a temporary path for each test."""
+    settings = get_settings()
+    original_upload_dir = settings.upload_dir
+    settings.upload_dir = str(tmp_path / "uploads")
+    os.makedirs(settings.upload_dir, exist_ok=True)
+    yield settings.upload_dir
+    settings.upload_dir = original_upload_dir
