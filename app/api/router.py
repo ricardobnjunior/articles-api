@@ -1,8 +1,9 @@
-"""Central API router with versioned prefix."""
+"""Central API router — aggregates all versioned sub-routers."""
 
 from fastapi import APIRouter
 
+from app.api.endpoints.articles import router as articles_router
+
 api_router = APIRouter(prefix="/api/v1")
 
-# Future endpoint routers will be included here via:
-# api_router.include_router(some_router, prefix="/resource", tags=["resource"])
+api_router.include_router(articles_router)

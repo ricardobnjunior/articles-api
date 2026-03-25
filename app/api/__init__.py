@@ -1,1 +1,1 @@
-"""API layer package."""
+"""API package."""
