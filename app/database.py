@@ -1,44 +1,22 @@
-"""
-Database configuration and session management.
-"""
+"""Database configuration and session management."""
 from sqlalchemy import create_engine
-from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
-
+from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import sessionmaker, Session
 from app.config import get_settings
 
 settings = get_settings()
 
-# SQLAlchemy engine for SQLite with connection arguments for thread safety
-engine = create_engine(
-    settings.database_url,
-    connect_args={"check_same_thread": False},
-    echo=False,
-)
+engine = create_engine(settings.database_url)
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
-# Session factory bound to the engine
-SessionLocal = sessionmaker(
-    bind=engine,
-    autoflush=False,
-    autocommit=False,
-    class_=Session,
-)
+Base = declarative_base()
 
 
-class Base(DeclarativeBase):
-    """Base class for all SQLAlchemy ORM models."""
-    __abstract__ = True
-
-
-def get_db():
-    """Dependency generator for database sessions.
+def get_db() -> Session:
+    """Dependency that provides a database session.
 
     Yields:
-        Session: SQLAlchemy database session.
-
-    Usage:
-        @app.get("/items")
-        def read_items(db: Session = Depends(get_db)):
-            ...
+        Database session.
     """
     db = SessionLocal()
     try:
@@ -47,6 +25,6 @@ def get_db():
         db.close()
 
 
-def create_tables():
-    """Create all tables defined in Base.metadata."""
+def create_tables() -> None:
+    """Create all database tables defined in models."""
     Base.metadata.create_all(bind=engine)

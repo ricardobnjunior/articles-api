@@ -1,54 +1,63 @@
-"""
-Pytest configuration and fixtures.
-"""
+"""Pytest configuration and fixtures."""
 import os
-
+from typing import Generator
 import pytest
 from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-from starlette.testclient import TestClient
+from sqlalchemy.orm import sessionmaker, Session
+from fastapi.testclient import TestClient
+from app.database import Base, get_db
 
-# Set environment variables BEFORE importing app modules
-# This is critical for pydantic-settings to load correct values
-os.environ.setdefault("DATABASE_URL", "sqlite:///test.db")
-os.environ.setdefault("SECRET_KEY", "test-secret-key")
-os.environ.setdefault("ENVIRONMENT", "testing")
+# Set environment variables BEFORE importing any app modules that use Settings
+os.environ.setdefault("DATABASE_URL", "sqlite:///./test.db")
+os.environ.setdefault("SECRET_KEY", "test-secret-key-not-for-production")
+os.environ.setdefault("CORS_ORIGINS_STR", '["http://localhost:3000"]')
 
-from app.config import get_settings  # noqa: E402
-from app.database import Base, SessionLocal, engine  # noqa: E402
-from app.main import app  # noqa: E402
-
-
-@pytest.fixture(scope="session", autouse=True)
-def setup_test_database():
-    """Create test database tables before tests and drop them after."""
-    # Create all tables
-    Base.metadata.create_all(bind=engine)
-    yield
-    # Drop all tables
-    Base.metadata.drop_all(bind=engine)
+# Override get_db dependency for testing
+engine = create_engine(os.environ["DATABASE_URL"])
+TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 
-@pytest.fixture
-def db_session():
-    """Provide a database session for tests.
-
-    Yields:
-        Session: SQLAlchemy database session.
-    """
-    db = SessionLocal()
+def override_get_db() -> Generator[Session, None, None]:
+    """Override database session for testing."""
+    db = TestingSessionLocal()
     try:
         yield db
     finally:
         db.close()
 
 
-@pytest.fixture
-def client():
-    """Provide a test client for API testing.
+app.dependency_overrides[get_db] = override_get_db
 
-    Returns:
-        TestClient: Starlette test client.
+
+@pytest.fixture(scope="function")
+def db_session() -> Generator[Session, None, None]:
+    """Provide a database session for tests.
+
+    Yields:
+        Database session.
     """
+    db = TestingSessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
+
+@pytest.fixture(scope="function")
+def client(db_session: Session) -> Generator[TestClient, None, None]:
+    """Provide a test client for API requests.
+
+    Args:
+        db_session: Database session fixture.
+
+    Yields:
+        TestClient instance.
+    """
+    # Create tables for each test
+    Base.metadata.create_all(bind=engine)
+
     with TestClient(app) as test_client:
         yield test_client
+
+    # Drop tables after each test
+    Base.metadata.drop_all(bind=engine)
