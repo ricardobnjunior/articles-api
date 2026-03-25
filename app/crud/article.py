@@ -1,20 +1,21 @@
-"""CRUD operations for Article model using sync SQLAlchemy Session."""
+"""CRUD operations for Article model."""
 
 from sqlalchemy.orm import Session
 
 from app.models.article import Article
+from app.models.category import Category
 from app.schemas.article import ArticleCreate, ArticleUpdate
 
 
 def create_article(db: Session, data: ArticleCreate) -> Article:
-    """Create a new article and persist it to the database.
+    """Create a new article.
 
     Args:
-        db: Synchronous SQLAlchemy database session.
-        data: Validated article creation payload.
+        db: SQLAlchemy database session.
+        data: Article creation data including optional category_ids.
 
     Returns:
-        The newly created Article ORM instance.
+        The newly created Article instance.
     """
     article = Article(
         title=data.title,
@@ -23,62 +24,81 @@ def create_article(db: Session, data: ArticleCreate) -> Article:
         status=data.status,
     )
     db.add(article)
+    db.flush()
+
+    if data.category_ids:
+        categories = (
+            db.query(Category).filter(Category.id.in_(data.category_ids)).all()
+        )
+        article.categories = categories
+
     db.commit()
     db.refresh(article)
     return article
 
 
 def get_article(db: Session, article_id: int) -> Article | None:
-    """Retrieve a single article by its primary key.
+    """Retrieve a single article by ID.
 
     Args:
-        db: Synchronous SQLAlchemy database session.
-        article_id: Primary key of the article to fetch.
+        db: SQLAlchemy database session.
+        article_id: Primary key of the article.
 
     Returns:
-        The Article ORM instance, or None if not found.
+        The Article instance, or None if not found.
     """
     return db.query(Article).filter(Article.id == article_id).first()
 
 
-def get_articles(db: Session, skip: int = 0, limit: int = 20) -> tuple[list[Article], int]:
-    """Retrieve a paginated list of articles along with the total count.
+def get_articles(
+    db: Session, skip: int = 0, limit: int = 20
+) -> tuple[int, list[Article]]:
+    """Retrieve a paginated list of articles.
 
     Args:
-        db: Synchronous SQLAlchemy database session.
-        skip: Number of records to skip (offset).
+        db: SQLAlchemy database session.
+        skip: Number of records to skip.
         limit: Maximum number of records to return.
 
     Returns:
-        A tuple of (list of Article ORM instances, total count of all articles).
+        A tuple of (total count, list of Article instances).
     """
-    query = db.query(Article)
-    total = query.count()
-    items = query.offset(skip).limit(limit).all()
-    return items, total
+    total = db.query(Article).count()
+    items = db.query(Article).offset(skip).limit(limit).all()
+    return total, items
 
 
-def update_article(db: Session, article_id: int, data: ArticleUpdate) -> Article | None:
-    """Update an existing article with the provided fields.
-
-    Only fields explicitly set in the request payload are updated
-    (uses ``exclude_unset=True``).
+def update_article(
+    db: Session, article_id: int, data: ArticleUpdate
+) -> Article | None:
+    """Update an existing article.
 
     Args:
-        db: Synchronous SQLAlchemy database session.
+        db: SQLAlchemy database session.
         article_id: Primary key of the article to update.
-        data: Validated article update payload.
+        data: Fields to update, including optional category_ids.
 
     Returns:
-        The updated Article ORM instance, or None if not found.
+        The updated Article instance, or None if not found.
     """
     article = db.query(Article).filter(Article.id == article_id).first()
     if article is None:
         return None
 
-    update_data = data.model_dump(exclude_unset=True)
-    for field, value in update_data.items():
-        setattr(article, field, value)
+    if data.title is not None:
+        article.title = data.title
+    if data.body is not None:
+        article.body = data.body
+    if data.author is not None:
+        article.author = data.author
+    if data.status is not None:
+        article.status = data.status
+
+    if data.category_ids is not None:
+        categories = (
+            db.query(Category).filter(Category.id.in_(data.category_ids)).all()
+        )
+        article.categories = categories
 
     db.commit()
     db.refresh(article)
@@ -86,14 +106,14 @@ def update_article(db: Session, article_id: int, data: ArticleUpdate) -> Article
 
 
 def delete_article(db: Session, article_id: int) -> bool:
-    """Delete an article by its primary key.
+    """Delete an article by ID.
 
     Args:
-        db: Synchronous SQLAlchemy database session.
+        db: SQLAlchemy database session.
         article_id: Primary key of the article to delete.
 
     Returns:
-        True if the article was found and deleted, False otherwise.
+        True if deleted, False if not found.
     """
     article = db.query(Article).filter(Article.id == article_id).first()
     if article is None:
