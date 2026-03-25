@@ -2,24 +2,11 @@
 
 from fastapi import FastAPI
 
-from app.api.router import api_router
-from app.config import get_settings
-from app.database import create_tables
+from app.api.router import router
+from app.database import Base, engine
 
-settings = get_settings()
+Base.metadata.create_all(bind=engine)
 
-app = FastAPI(title="Content API")
+app = FastAPI(title="Articles API", version="1.0.0")
 
-create_tables()
-
-app.include_router(api_router)
-
-
-@app.get("/health", tags=["health"])
-def health_check() -> dict:
-    """Return service health status.
-
-    Returns:
-        A dictionary containing the service status and current environment.
-    """
-    return {"status": "ok", "environment": settings.environment}
+app.include_router(router)

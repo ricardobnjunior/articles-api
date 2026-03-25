@@ -1,47 +1,68 @@
-"""Pydantic schemas for Article request/response validation."""
+"""Pydantic schemas for Article endpoints."""
 
+import math
 from datetime import datetime
-from typing import Optional
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel
 
 from app.models.article import ArticleStatus
 
 
-class ArticleCreate(BaseModel):
-    """Schema for creating a new article."""
+class CategoryBase(BaseModel):
+    """Base schema for category."""
 
-    title: str = Field(..., max_length=200)
+    id: int
+    name: str
+
+    model_config = {"from_attributes": True}
+
+
+class ArticleCreate(BaseModel):
+    """Schema for creating an article."""
+
+    title: str
     body: str
-    author: str = Field(..., max_length=100)
+    author: str
     status: ArticleStatus = ArticleStatus.draft
+    category_ids: list[int] = []
 
 
 class ArticleUpdate(BaseModel):
-    """Schema for updating an existing article (all fields optional)."""
+    """Schema for updating an article."""
 
-    title: Optional[str] = Field(None, max_length=200)
-    body: Optional[str] = None
-    author: Optional[str] = Field(None, max_length=100)
-    status: Optional[ArticleStatus] = None
+    title: str | None = None
+    body: str | None = None
+    author: str | None = None
+    status: ArticleStatus | None = None
+    category_ids: list[int] | None = None
 
 
 class ArticleResponse(BaseModel):
-    """Schema for article responses including all model fields."""
-
-    model_config = ConfigDict(from_attributes=True)
+    """Schema for article response."""
 
     id: int
     title: str
     body: str
     author: str
     status: ArticleStatus
-    created_at: Optional[datetime] = None
-    updated_at: Optional[datetime] = None
+    categories: list[CategoryBase] = []
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class PaginationMeta(BaseModel):
+    """Pagination metadata."""
+
+    total: int
+    page: int
+    per_page: int
+    pages: int
 
 
 class ArticleList(BaseModel):
     """Schema for paginated list of articles."""
 
     items: list[ArticleResponse]
-    total: int
+    meta: PaginationMeta

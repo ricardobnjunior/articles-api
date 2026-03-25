@@ -1,52 +1,57 @@
-"""Root-level pytest configuration and shared fixtures."""
+"""Shared test fixtures."""
 
-import os
+import pytest
+from fastapi.testclient import TestClient
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
 
-# Set test environment variables BEFORE importing any app modules.
-os.environ.setdefault("DATABASE_URL", "sqlite:///test.db")
-os.environ.setdefault("SECRET_KEY", "test-secret-key-not-for-production")
-os.environ.setdefault("ENVIRONMENT", "testing")
+from app.database import Base, get_db
+from app.main import app
 
-import pytest  # noqa: E402
-from sqlalchemy.orm import Session  # noqa: E402
-from starlette.testclient import TestClient  # noqa: E402
+TEST_DATABASE_URL = "sqlite:///./test.db"
 
-from app.database import Base, SessionLocal, create_tables, engine  # noqa: E402
-from app.main import app  # noqa: E402
+engine = create_engine(
+    TEST_DATABASE_URL,
+    connect_args={"check_same_thread": False},
+)
 
-
-@pytest.fixture(scope="session", autouse=True)
-def setup_database() -> None:
-    """Create all database tables once for the test session.
-
-    Yields:
-        None
-    """
-    create_tables()
-    yield
-    Base.metadata.drop_all(bind=engine)
+TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 
-@pytest.fixture
-def db_session() -> Session:
-    """Yield a SQLAlchemy Session for use in tests.
+@pytest.fixture(scope="function")
+def db_session():
+    """Provide a clean database session for each test.
 
     Yields:
-        Session: An active sync SQLAlchemy session that is closed after the test.
+        A SQLAlchemy Session bound to an in-memory test database.
     """
-    db: Session = SessionLocal()
+    Base.metadata.create_all(bind=engine)
+    db = TestingSessionLocal()
     try:
         yield db
     finally:
         db.close()
+        Base.metadata.drop_all(bind=engine)
 
 
-@pytest.fixture
-def client() -> TestClient:
-    """Yield a Starlette TestClient wrapping the FastAPI application.
+@pytest.fixture(scope="function")
+def client(db_session):
+    """Provide a TestClient with the test database session.
+
+    Args:
+        db_session: The test database session fixture.
 
     Yields:
-        TestClient: A synchronous HTTP test client.
+        A FastAPI TestClient instance.
     """
-    with TestClient(app) as test_client:
-        yield test_client
+
+    def override_get_db():
+        try:
+            yield db_session
+        finally:
+            pass
+
+    app.dependency_overrides[get_db] = override_get_db
+    with TestClient(app) as c:
+        yield c
+    app.dependency_overrides.clear()
